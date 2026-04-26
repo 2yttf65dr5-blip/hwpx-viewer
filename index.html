@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>HWPX 뷰어</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  :root {
+    --bg:#0f0f11;--surface:#1a1a1f;--surface2:#22222a;--border:#2e2e3a;
+    --accent:#7c6af7;--accent2:#a78bfa;--text:#e8e8f0;--text-muted:#6b6b80;--warn:#fbbf24;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-serif;font-weight:300;min-height:100vh;}
+  .app{max-width:680px;margin:0 auto;padding:0 16px 80px;}
+  header{padding:28px 0 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);margin-bottom:28px;}
+  .logo{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+  .header-text h1{font-size:16px;font-weight:500;}
+  .header-text p{font-size:11px;color:var(--text-muted);margin-top:1px;font-family:'JetBrains Mono',monospace;}
+  .upload-zone{border:1.5px dashed var(--border);border-radius:16px;padding:44px 24px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface);}
+  .upload-zone:hover{border-color:var(--accent);background:var(--surface2);}
+  .upload-icon{font-size:40px;margin-bottom:14px;display:block;}
+  .upload-zone h2{font-size:15px;font-weight:500;margin-bottom:6px;}
+  .upload-zone p{font-size:12px;color:var(--text-muted);line-height:1.5;}
+  .ext-badge{display:inline-block;background:rgba(124,106,247,.15);color:var(--accent2);font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 8px;border-radius:5px;margin-top:12px;}
+  #file-input{display:none;}
+  .loading{display:none;text-align:center;padding:48px 24px;}
+  .loading.show{display:block;}
+  .spinner{width:36px;height:36px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loading p{font-size:13px;color:var(--text-muted);}
+  .error-box{display:none;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:12px;padding:16px 20px;font-size:13px;color:#fc8181;line-height:1.6;}
+  .error-box.show{display:block;}
+  .file-info{display:none;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:20px;align-items:center;gap:12px;}
+  .file-info.show{display:flex;}
+  .file-info-icon{font-size:22px;flex-shrink:0;}
+  .file-info-text{flex:1;min-width:0;}
+  .file-info-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .file-info-meta{font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;margin-top:2px;}
+  .btn-reset{background:var(--surface2);border:1px solid var(--border);color:var(--text-muted);font-size:12px;padding:6px 12px;border-radius:8px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;flex-shrink:0;}
+  .viewer{display:none;animation:fadeUp .3s ease;}
+  .viewer.show{display:block;}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  .tabs{display:flex;gap:4px;margin-bottom:20px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:4px;}
+  .tab{flex:1;padding:9px 12px;border:none;background:transparent;color:var(--text-muted);font-size:12px;font-family:'Noto Sans KR',sans-serif;border-radius:9px;cursor:pointer;text-align:center;}
+  .tab.active{background:var(--accent);color:white;font-weight:500;}
+  .doc-content{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px 24px;line-height:1.85;font-size:14px;}
+  .doc-content.hidden{display:none;}
+  .para{margin-bottom:12px;word-break:keep-all;overflow-wrap:break-word;}
+  .para.heading-1{font-size:20px;font-weight:700;margin:24px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+  .para.heading-2{font-size:17px;font-weight:500;color:var(--accent2);margin:20px 0 8px;}
+  .para.heading-3{font-size:15px;font-weight:500;margin:16px 0 6px;}
+  .para.empty{height:8px;margin-bottom:0;}
+  .run-bold{font-weight:700;}.run-italic{font-style:italic;}.run-underline{text-decoration:underline;}
+  .doc-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px;display:block;overflow-x:auto;}
+  .doc-table td{border:1px solid var(--border);padding:8px 12px;vertical-align:top;min-width:60px;}
+  .doc-table tr:first-child td{background:var(--surface2);font-weight:500;}
+  .img-placeholder{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;padding:8px 14px;font-size:12px;color:var(--text-muted);margin:8px 0;}
+  .meta-content{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+  .meta-content.hidden{display:none;}
+  .meta-row{display:flex;align-items:flex-start;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border);font-size:13px;}
+  .meta-row:last-child{border-bottom:none;}
+  .meta-key{color:var(--text-muted);font-family:'JetBrains Mono',monospace;font-size:11px;flex-shrink:0;width:80px;padding-top:1px;}
+  .meta-val{color:var(--text);flex:1;word-break:break-all;}
+  .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center;}
+  .stat-num{font-size:26px;font-weight:700;color:var(--accent2);font-family:'JetBrains Mono',monospace;display:block;}
+  .stat-label{font-size:11px;color:var(--text-muted);margin-top:4px;display:block;}
+  .limit-notice{background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.2);border-radius:10px;padding:12px 16px;font-size:12px;color:var(--warn);margin-bottom:16px;line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">📄</div>
+    <div class="header-text">
+      <h1>HWPX 뷰어</h1>
+      <p>.hwpx · 로컬 처리 · 설치 없음</p>
+    </div>
+  </header>
+  <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+    <span class="upload-icon">📂</span>
+    <h2>HWPX 파일을 올려주세요</h2>
+    <p>탭해서 파일 선택</p>
+    <span class="ext-badge">.hwpx</span>
+    <input type="file" id="file-input" accept=".hwpx,.zip">
+  </div>
+  <div class="loading" id="loading"><div class="spinner"></div><p>파일 읽는 중...</p></div>
+  <div class="error-box" id="error-box"></div>
+  <div class="file-info" id="file-info">
+    <div class="file-info-icon">📄</div>
+    <div class="file-info-text">
+      <div class="file-info-name" id="file-name"></div>
+      <div class="file-info-meta" id="file-meta"></div>
+    </div>
+    <button class="btn-reset" onclick="resetViewer()">✕ 닫기</button>
+  </div>
+  <div class="viewer" id="viewer">
+    <div class="stats-grid" id="stats-grid"></div>
+    <div class="limit-notice" id="limit-notice" style="display:none">⚠️ 이미지·수식·복잡한 레이아웃은 완벽히 표시되지 않을 수 있어요.</div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('doc')">📝 본문</button>
+      <button class="tab" onclick="switchTab('meta')">ℹ️ 정보</button>
+    </div>
+    <div class="doc-content" id="doc-content"></div>
+    <div class="meta-content hidden" id="meta-content"></div>
+  </div>
+</div>
+<script>
+function show(id){document.getElementById(id).classList.add('show');}
+function hide(id){document.getElementById(id).classList.remove('show');}
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',(i===0)===(tab==='doc')));
+  document.getElementById('doc-content').classList.toggle('hidden',tab!=='doc');
+  document.getElementById('meta-content').classList.toggle('hidden',tab!=='meta');
+}
+function resetViewer(){
+  hide('file-info');hide('viewer');
+  document.getElementById('upload-zone').style.display='';
+  document.getElementById('error-box').classList.remove('show');
+  document.getElementById('file-input').value='';
+  document.getElementById('doc-content').innerHTML='';
+  document.getElementById('meta-content').innerHTML='';
+  document.getElementById('stats-grid').innerHTML='';
+}
+function fmtSize(b){if(b<1024)return b+' B';if(b<1048576)return (b/1024).toFixed(1)+' KB';return (b/1048576).toFixed(1)+' MB';}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+document.getElementById('file-input').addEventListener('change',e=>{if(e.target.files[0])processFile(e.target.files[0]);});
+
+async function processFile(file){
+  document.getElementById('upload-zone').style.display='none';
+  document.getElementById('error-box').classList.remove('show');
+  show('loading');
+  try{
+    if(!file.name.match(/\.(hwpx|zip)$/i))throw new Error('HWPX 파일(.hwpx)만 지원해요.');
+    const buf=await file.arrayBuffer();
+    const zip=await JSZip.loadAsync(buf);
+    const files=Object.keys(zip.files);
+    const meta=await parseMeta(zip);
+    const sections=await parseSections(zip);
+    hide('loading');
+    document.getElementById('file-name').textContent=file.name;
+    document.getElementById('file-meta').textContent=fmtSize(file.size)+' · '+files.length+'개 내부파일';
+    show('file-info');
+    renderStats(sections);
+    renderDoc(sections);
+    renderMeta(meta,file);
+    show('viewer');
+  }catch(e){
+    hide('loading');
+    const box=document.getElementById('error-box');
+    box.textContent='❌ '+(e.message||'파일을 읽을 수 없어요.');
+    box.classList.add('show');
+    document.getElementById('upload-zone').style.display='';
+  }
+}
+
+async function parseMeta(zip){
+  const meta={};
+  for(const path of Object.keys(zip.files)){
+    if(path.includes('docInfo')||path.includes('DocInfo')){
+      try{
+        const xml=await zip.files[path].async('string');
+        const doc=new DOMParser().parseFromString(xml,'text/xml');
+        const g=tag=>doc.querySelector(tag)?.textContent?.trim()||'';
+        meta.title=g('title');meta.author=g('author');meta.created=g('created');meta.modified=g('modified');
+      }catch(e){}
+    }
+  }
+  return meta;
+}
+
+async function parseSections(zip){
+  const allParagraphs=[];let hasComplex=false;
+  let sectionPaths=Object.keys(zip.files).filter(p=>
+    p.match(/[Ss]ection\d*\.xml/i)||p.match(/[Cc]ontent\/[Ss]ection/i)
+  ).sort();
+  if(sectionPaths.length===0){
+    for(const p of Object.keys(zip.files).filter(p=>p.endsWith('.xml')&&!p.includes('META')&&!p.includes('Info')).slice(0,10)){
+      try{const xml=await zip.files[p].async('string');if(xml.includes('hp:p')||xml.includes('hh:p')){sectionPaths.push(p);break;}}catch(e){}
+    }
+  }
+  if(sectionPaths.length===0)throw new Error('본문 파일을 찾을 수 없어요. 올바른 HWPX 파일인지 확인해주세요.');
+  for(const path of sectionPaths){
+    try{const xml=await zip.files[path].async('string');const r=parseSection(xml);allParagraphs.push(...r.paragraphs);if(r.hasComplex)hasComplex=true;}catch(e){}
+  }
+  return{paragraphs:allParagraphs,hasComplex};
+}
+
+function parseSection(xmlStr){
+  const doc=new DOMParser().parseFromString(xmlStr,'text/xml');
+  const paragraphs=[];let hasComplex=false;
+  let pNodes=[];
+  for(const tag of['hp\\:p','p','hh\\:p']){pNodes=doc.querySelectorAll(tag);if(pNodes.length>0)break;}
+  if(pNodes.length===0)pNodes=Array.from(doc.getElementsByTagName('*')).filter(el=>el.localName==='p');
+  for(const p of pNodes){const para=parseParagraph(p);if(para){paragraphs.push(para);if(para.hasImage||para.hasTable)hasComplex=true;}}
+  return{paragraphs,hasComplex};
+}
+
+function parseParagraph(pEl){
+  const runs=[];let hasImage=false,hasTable=false;
+  const styleAttr=pEl.getAttribute('styleId')||'';
+  let isHeading=false,headingLevel=0;
+  if(styleAttr.match(/heading|제목|Heading/i)){isHeading=true;const m=styleAttr.match(/(\d)/);headingLevel=m?parseInt(m[1]):1;}
+  function walk(el){
+    for(const child of el.childNodes){
+      const ln=child.localName||'';
+      if(ln==='run'||ln==='r'){const t=extractText(child);const s=extractStyle(child);if(t)runs.push({text:t,...s});}
+      else if(ln==='t'||child.nodeType===3){const t=(child.textContent||'').replace(/\n/g,' ');if(t.trim())runs.push({text:t});}
+      else if(ln==='pic'||ln==='image'){hasImage=true;runs.push({isImage:true});}
+      else if(ln==='tbl'||ln==='table'){hasTable=true;runs.push({isTable:true,tableEl:child});}
+      else if(child.childNodes&&child.childNodes.length>0)walk(child);
+    }
+  }
+  walk(pEl);
+  if(!isHeading&&runs.length>0){
+    const fr=runs.find(r=>r.text);
+    if(fr&&fr.fontSize){if(fr.fontSize>=18){isHeading=true;headingLevel=1;}else if(fr.fontSize>=15){isHeading=true;headingLevel=2;}}
+  }
+  return{runs,isHeading,headingLevel,hasImage,hasTable,isEmpty:runs.length===0||runs.every(r=>!r.text?.trim()&&!r.isImage&&!r.isTable)};
+}
+
+function extractText(el){
+  const ts=Array.from(el.getElementsByTagName('*')).filter(e=>e.localName==='t');
+  return ts.length>0?ts.map(t=>t.textContent||'').join(''):el.textContent||'';
+}
+
+function extractStyle(el){
+  const s={};
+  const cp=Array.from(el.getElementsByTagName('*')).find(e=>e.localName==='charPr'||e.localName==='rPr');
+  if(cp){
+    s.bold=cp.getAttribute('bold')==='1';s.italic=cp.getAttribute('italic')==='1';
+    const sz=cp.getAttribute('fontSize')||cp.getAttribute('sz');
+    if(sz)s.fontSize=parseInt(sz)/100||parseInt(sz);
+  }
+  return s;
+}
+
+function renderStats(sections){
+  const ps=sections.paragraphs;
+  const chars=ps.reduce((s,p)=>s+p.runs.reduce((a,r)=>a+(r.text?.length||0),0),0);
+  const paras=ps.filter(p=>!p.isEmpty).length;
+  const imgs=ps.reduce((s,p)=>s+p.runs.filter(r=>r.isImage).length,0);
+  document.getElementById('stats-grid').innerHTML=
+    [[chars.toLocaleString(),'글자'],[paras.toLocaleString(),'단락'],[imgs.toLocaleString(),'이미지']].map(([n,l])=>
+      `<div class="stat-card"><span class="stat-num">${n}</span><span class="stat-label">${l}</span></div>`
+    ).join('');
+  if(sections.hasComplex)document.getElementById('limit-notice').style.display='';
+}
+
+function renderDoc(sections){
+  const frags=[];
+  for(const para of sections.paragraphs){
+    if(para.isEmpty){frags.push('<div class="para empty"></div>');continue;}
+    let cls='para';
+    if(para.isHeading)cls+=` heading-${Math.min(para.headingLevel||1,3)}`;
+    let inner='';
+    for(const run of para.runs){
+      if(run.isImage)inner+='<span class="img-placeholder">🖼 이미지</span>';
+      else if(run.isTable)inner+=renderTable(run.tableEl);
+      else if(run.text){
+        let sp=escHtml(run.text);
+        const c=[];
+        if(run.bold)c.push('run-bold');if(run.italic)c.push('run-italic');
+        if(c.length)sp=`<span class="${c.join(' ')}">${sp}</span>`;
+        inner+=sp;
+      }
+    }
+    frags.push(`<div class="${cls}">${inner}</div>`);
+  }
+  document.getElementById('doc-content').innerHTML=frags.join('')||'<div class="para" style="color:var(--text-muted)">본문 내용이 없어요.</div>';
+}
+
+function renderTable(tblEl){
+  if(!tblEl)return '<span class="img-placeholder">📊 표</span>';
+  try{
+    const rows=Array.from(tblEl.getElementsByTagName('*')).filter(el=>el.localName==='tr');
+    if(!rows.length)return '<span class="img-placeholder">📊 표</span>';
+    let html='<table class="doc-table"><tbody>';
+    for(const row of rows){
+      const cells=Array.from(row.getElementsByTagName('*')).filter(el=>el.localName==='tc'||el.localName==='td');
+      if(!cells.length)continue;
+      html+='<tr>'+cells.map(c=>`<td>${escHtml((c.textContent||'').trim())}</td>`).join('')+'</tr>';
+    }
+    return html+'</tbody></table>';
+  }catch(e){return '<span class="img-placeholder">📊 표</span>';}
+}
+
+function renderMeta(meta,file){
+  document.getElementById('meta-content').innerHTML=
+    [['파일명',file.name],['크기',fmtSize(file.size)],['제목',meta.title||'(없음)'],
+     ['작성자',meta.author||'(없음)'],['작성일',meta.created||'(없음)'],['수정일',meta.modified||'(없음)']
+    ].map(([k,v])=>`<div class="meta-row"><span class="meta-key">${k}</span><span class="meta-val">${escHtml(String(v))}</span></div>`).join('');
+}
+</script>
+</body>
+</html>
